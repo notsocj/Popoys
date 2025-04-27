@@ -1,0 +1,38 @@
+{
+    "github.copilot.chat.codeGeneration.instructions": [
+      {
+        "text": "Write clean and organized JavaScript code"
+      },
+      {
+        "text": "Use plain HTML for structuring the website"
+      },
+      {
+        "text": "Use Tailwind CSS for all styling and layout designs"
+      },
+      {
+        "text": "Keep functions small and focused"
+      },
+      {
+        "text": "Name variables and functions in camelCase"
+      },
+      {
+        "text": "Use semantic HTML tags when possible (e.g., <header>, <main>, <footer>)"
+      },
+      {
+        "text": "Avoid inline styles; use Tailwind classes instead"
+      },
+      {
+        "text": "Prefer event delegation for handling multiple dynamic elements"
+      },
+      {
+        "text": "Do not add comments to the code unless necessary"
+      },
+      {
+        "text": "Use minimalist font like 'Inter' for the project"
+      },
+      {
+        "file": "database.md" // import instructions from file `db.instructions.md`
+      }
+    ]
+  }
+  
