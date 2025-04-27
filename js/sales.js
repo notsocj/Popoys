@@ -91,6 +91,56 @@ function setupSalesInterface(container) {
                 </table>
             </div>
         </div>
+        
+        <!-- Edit Order Modal -->
+        <div id="edit-order-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                <h3 class="text-xl font-bold text-coffee-dark mb-4">Edit Order Status</h3>
+                
+                <div class="mb-6">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-gray-700">Order ID:</span>
+                        <span id="edit-order-id" class="font-semibold"></span>
+                    </div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-gray-700">Date:</span>
+                        <span id="edit-order-date" class="font-semibold"></span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-700">Amount:</span>
+                        <span id="edit-order-amount" class="font-semibold"></span>
+                    </div>
+                </div>
+                
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Order Status</label>
+                    <div class="flex gap-6">
+                        <label class="flex items-center">
+                            <input type="radio" name="order-status" value="Completed" class="mr-2">
+                            <span>Completed</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="radio" name="order-status" value="Voided" class="mr-2">
+                            <span>Voided</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div id="void-reason-container" class="mb-6 hidden">
+                    <label for="void-reason" class="block text-sm font-medium text-gray-700 mb-1">Reason for Voiding</label>
+                    <textarea id="void-reason" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-coffee focus:border-coffee"></textarea>
+                </div>
+                
+                <div class="flex justify-end gap-4">
+                    <button type="button" id="cancel-edit-btn" class="px-4 py-2 text-coffee-dark border border-coffee-dark rounded-md hover:bg-coffee-light hover:text-white transition-colors">
+                        Cancel
+                    </button>
+                    <button type="button" id="save-order-btn" class="px-4 py-2 bg-coffee text-white rounded-md hover:bg-coffee-dark transition-colors">
+                        Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
     `;
     
     // Set default dates
@@ -132,6 +182,30 @@ function setupSalesEventListeners() {
     
     generateReportBtn.addEventListener('click', generateReport);
     exportReportBtn.addEventListener('click', exportReport);
+    
+    // Edit order modal handlers
+    const statusRadios = document.querySelectorAll('input[name="order-status"]');
+    statusRadios.forEach(radio => {
+        radio.addEventListener('change', () => {
+            const voidReasonContainer = document.getElementById('void-reason-container');
+            if (radio.value === 'Voided') {
+                voidReasonContainer.classList.remove('hidden');
+            } else {
+                voidReasonContainer.classList.add('hidden');
+            }
+        });
+    });
+    
+    document.getElementById('cancel-edit-btn').addEventListener('click', hideEditOrderModal);
+    document.getElementById('save-order-btn').addEventListener('click', saveOrderChanges);
+    
+    // Event delegation for edit buttons that will be added to the table
+    document.getElementById('report-table-body').addEventListener('click', (e) => {
+        if (e.target.closest('.edit-order-btn')) {
+            const orderId = e.target.closest('.edit-order-btn').dataset.id;
+            showEditOrderModal(orderId);
+        }
+    });
 }
 
 function populatePeriodOptions(reportType) {
@@ -229,7 +303,6 @@ async function generateSalesReport(reportType, startDate, endDate) {
         const { data: orders, error } = await supabase
             .from('orders')
             .select('*')
-            .eq('order_status', ORDER_STATUS.COMPLETED)
             .gte('created_at', startDate)
             .lt('created_at', endDate)
             .order('created_at');
@@ -241,9 +314,12 @@ async function generateSalesReport(reportType, startDate, endDate) {
         document.getElementById('chart-title').textContent = 'Sales Trend';
         
         // Prepare summary data
-        const totalSales = orders.reduce((sum, order) => sum + parseFloat(order.total_amount), 0);
-        const averageOrderValue = orders.length > 0 ? totalSales / orders.length : 0;
-        const salesByPaymentMethod = orders.reduce((acc, order) => {
+        const completedOrders = orders.filter(order => order.order_status === ORDER_STATUS.COMPLETED);
+        const voidedOrders = orders.filter(order => order.order_status === ORDER_STATUS.VOIDED);
+        
+        const totalSales = completedOrders.reduce((sum, order) => sum + parseFloat(order.total_amount), 0);
+        const averageOrderValue = completedOrders.length > 0 ? totalSales / completedOrders.length : 0;
+        const salesByPaymentMethod = completedOrders.reduce((acc, order) => {
             acc[order.payment_method] = (acc[order.payment_method] || 0) + parseFloat(order.total_amount);
             return acc;
         }, {});
@@ -254,7 +330,7 @@ async function generateSalesReport(reportType, startDate, endDate) {
             <div class="grid grid-cols-2 gap-4">
                 <div class="p-3 bg-coffee-cream rounded-lg">
                     <p class="text-sm text-gray-600">Total Orders</p>
-                    <p class="text-xl font-bold text-coffee-dark">${orders.length}</p>
+                    <p class="text-xl font-bold text-coffee-dark">${orders.length} (${completedOrders.length} completed, ${voidedOrders.length} voided)</p>
                 </div>
                 <div class="p-3 bg-coffee-cream rounded-lg">
                     <p class="text-sm text-gray-600">Total Sales</p>
@@ -266,7 +342,7 @@ async function generateSalesReport(reportType, startDate, endDate) {
                 </div>
                 <div class="p-3 bg-coffee-cream rounded-lg">
                     <p class="text-sm text-gray-600">Most Used Payment</p>
-                    <p class="text-xl font-bold text-coffee-dark">${getMostCommonPayment(orders)}</p>
+                    <p class="text-xl font-bold text-coffee-dark">${getMostCommonPayment(completedOrders)}</p>
                 </div>
             </div>
             
@@ -286,13 +362,13 @@ async function generateSalesReport(reportType, startDate, endDate) {
         // Prepare data for chart based on report type
         let chartData;
         if (reportType === 'daily') {
-            chartData = prepareDailySalesData(orders, startDate, endDate);
+            chartData = prepareDailySalesData(completedOrders, startDate, endDate);
         } else if (reportType === 'weekly') {
-            chartData = prepareWeeklySalesData(orders);
+            chartData = prepareWeeklySalesData(completedOrders);
         } else if (reportType === 'monthly') {
-            chartData = prepareYearlySalesData(orders, 'month');
+            chartData = prepareYearlySalesData(completedOrders, 'month');
         } else if (reportType === 'yearly') {
-            chartData = prepareYearlySalesData(orders, 'year');
+            chartData = prepareYearlySalesData(completedOrders, 'year');
         }
         
         // Create chart
@@ -305,14 +381,16 @@ async function generateSalesReport(reportType, startDate, endDate) {
             <th class="py-3 px-4 text-left">User</th>
             <th class="py-3 px-4 text-left">Items</th>
             <th class="py-3 px-4 text-left">Payment</th>
+            <th class="py-3 px-4 text-left">Status</th>
             <th class="py-3 px-4 text-left">Total</th>
+            <th class="py-3 px-4 text-left">Actions</th>
         `;
         
         // Update table body with orders
         const tableBody = document.getElementById('report-table-body');
         
         if (orders.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-gray-500">No orders found in this date range</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-gray-500">No orders found in this date range</td></tr>';
             return;
         }
         
@@ -345,6 +423,10 @@ async function generateSalesReport(reportType, startDate, endDate) {
             const orderDate = new Date(order.created_at).toLocaleString();
             const itemsSummary = details.map(d => `${d.quantity} x ${d.products.product_name}`).join(', ');
             
+            const statusClass = order.order_status === ORDER_STATUS.COMPLETED 
+                ? 'bg-green-100 text-green-800' 
+                : 'bg-red-100 text-red-800';
+            
             tableContent += `
                 <tr class="border-b hover:bg-gray-50">
                     <td class="py-3 px-4">${order.order_id}</td>
@@ -352,7 +434,17 @@ async function generateSalesReport(reportType, startDate, endDate) {
                     <td class="py-3 px-4">${username}</td>
                     <td class="py-3 px-4">${itemsSummary}</td>
                     <td class="py-3 px-4">${order.payment_method}</td>
+                    <td class="py-3 px-4">
+                        <span class="px-2 py-1 rounded-full text-xs font-medium ${statusClass}">
+                            ${order.order_status}
+                        </span>
+                    </td>
                     <td class="py-3 px-4">₱${parseFloat(order.total_amount).toFixed(2)}</td>
+                    <td class="py-3 px-4">
+                        <button class="edit-order-btn text-coffee hover:text-coffee-dark" data-id="${order.order_id}">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                    </td>
                 </tr>
             `;
         }
@@ -917,4 +1009,232 @@ function formatDateRange(startDate, endDate) {
     const end = new Date(endDate);
     
     return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
+}
+
+// Add these new functions for order editing
+async function showEditOrderModal(orderId) {
+    try {
+        const { data: order, error } = await supabase
+            .from('orders')
+            .select('*')
+            .eq('order_id', orderId)
+            .single();
+            
+        if (error) throw error;
+        
+        // Get void reason if the order is voided
+        let voidReason = '';
+        if (order.order_status === ORDER_STATUS.VOIDED) {
+            const { data: voidData, error: voidError } = await supabase
+                .from('voided_sales')
+                .select('reason')
+                .eq('order_id', orderId)
+                .single();
+                
+            if (!voidError && voidData) {
+                voidReason = voidData.reason;
+            }
+        }
+        
+        // Populate the modal
+        document.getElementById('edit-order-id').textContent = order.order_id;
+        document.getElementById('edit-order-date').textContent = new Date(order.created_at).toLocaleString();
+        document.getElementById('edit-order-amount').textContent = `₱${parseFloat(order.total_amount).toFixed(2)}`;
+        
+        // Set the current status
+        const statusRadios = document.querySelectorAll('input[name="order-status"]');
+        statusRadios.forEach(radio => {
+            if (radio.value === order.order_status) {
+                radio.checked = true;
+            }
+        });
+        
+        // Show/hide void reason container
+        const voidReasonContainer = document.getElementById('void-reason-container');
+        if (order.order_status === ORDER_STATUS.VOIDED) {
+            voidReasonContainer.classList.remove('hidden');
+        } else {
+            voidReasonContainer.classList.add('hidden');
+        }
+        
+        // Set void reason if available
+        document.getElementById('void-reason').value = voidReason;
+        
+        // Show the modal
+        document.getElementById('edit-order-modal').classList.remove('hidden');
+        
+    } catch (error) {
+        console.error('Error fetching order details:', error);
+        alert('Error fetching order details');
+    }
+}
+
+function hideEditOrderModal() {
+    document.getElementById('edit-order-modal').classList.add('hidden');
+}
+
+async function saveOrderChanges() {
+    try {
+        const orderId = document.getElementById('edit-order-id').textContent;
+        const newStatus = document.querySelector('input[name="order-status"]:checked').value;
+        const userId = localStorage.getItem('userId');
+        
+        // Get current order status
+        const { data: currentOrder, error: orderError } = await supabase
+            .from('orders')
+            .select('order_status')
+            .eq('order_id', orderId)
+            .single();
+            
+        if (orderError) throw orderError;
+        
+        // If status hasn't changed, just close the modal
+        if (currentOrder.order_status === newStatus) {
+            hideEditOrderModal();
+            return;
+        }
+        
+        // Update order status
+        const { error: updateError } = await supabase
+            .from('orders')
+            .update({ order_status: newStatus })
+            .eq('order_id', orderId);
+            
+        if (updateError) throw updateError;
+        
+        // Handle inventory and void records
+        if (newStatus === ORDER_STATUS.VOIDED && currentOrder.order_status === ORDER_STATUS.COMPLETED) {
+            // Order changed from Completed to Voided
+            
+            // Get reason
+            const voidReason = document.getElementById('void-reason').value;
+            if (!voidReason) {
+                alert('Please provide a reason for voiding this order');
+                return;
+            }
+            
+            // Add void record
+            const { error: voidError } = await supabase
+                .from('voided_sales')
+                .insert([{
+                    order_id: orderId,
+                    user_id: userId,
+                    reason: voidReason
+                }]);
+                
+            if (voidError) throw voidError;
+            
+            // Return ingredients to inventory
+            await returnIngredientsToInventory(orderId);
+            
+        } else if (newStatus === ORDER_STATUS.COMPLETED && currentOrder.order_status === ORDER_STATUS.VOIDED) {
+            // Order changed from Voided to Completed
+            
+            // Delete void record
+            const { error: deleteVoidError } = await supabase
+                .from('voided_sales')
+                .delete()
+                .eq('order_id', orderId);
+                
+            if (deleteVoidError) throw deleteVoidError;
+            
+            // Deduct ingredients from inventory again
+            await deductIngredientsFromInventory(orderId);
+        }
+        
+        // Hide modal and refresh the report
+        hideEditOrderModal();
+        const reportType = document.getElementById('report-type').value;
+        generateReport();
+        
+        alert(`Order #${orderId} has been updated to "${newStatus}" status`);
+        
+    } catch (error) {
+        console.error('Error updating order:', error);
+        alert(`Error updating order: ${error.message}`);
+    }
+}
+
+async function returnIngredientsToInventory(orderId) {
+    try {
+        // Get the order details
+        const { data: orderDetails, error: detailsError } = await supabase
+            .from('order_details')
+            .select(`
+                product_id,
+                quantity
+            `)
+            .eq('order_id', orderId);
+            
+        if (detailsError) throw detailsError;
+        
+        // For each product in the order
+        for (const detail of orderDetails) {
+            // Get ingredients for this product
+            const { data: productIngredients, error: ingredientsError } = await supabase
+                .from('product_ingredients')
+                .select('ingredient_id, quantity_needed')
+                .eq('product_id', detail.product_id);
+                
+            if (ingredientsError) throw ingredientsError;
+            
+            // Add back each ingredient to inventory
+            for (const ingredient of productIngredients) {
+                const totalAmount = parseFloat(ingredient.quantity_needed) * detail.quantity;
+                
+                // Update ingredient stock
+                const { error: updateError } = await supabase.rpc('increment_ingredient_stock', {
+                    ing_id: ingredient.ingredient_id,
+                    add_amount: totalAmount
+                });
+                
+                if (updateError) throw updateError;
+            }
+        }
+    } catch (error) {
+        console.error('Error returning ingredients to inventory:', error);
+        throw error;
+    }
+}
+
+async function deductIngredientsFromInventory(orderId) {
+    try {
+        // Get the order details
+        const { data: orderDetails, error: detailsError } = await supabase
+            .from('order_details')
+            .select(`
+                product_id,
+                quantity
+            `)
+            .eq('order_id', orderId);
+            
+        if (detailsError) throw detailsError;
+        
+        // For each product in the order
+        for (const detail of orderDetails) {
+            // Get ingredients for this product
+            const { data: productIngredients, error: ingredientsError } = await supabase
+                .from('product_ingredients')
+                .select('ingredient_id, quantity_needed')
+                .eq('product_id', detail.product_id);
+                
+            if (ingredientsError) throw ingredientsError;
+            
+            // Deduct each ingredient from inventory
+            for (const ingredient of productIngredients) {
+                const totalAmount = parseFloat(ingredient.quantity_needed) * detail.quantity;
+                
+                // Update ingredient stock
+                const { error: updateError } = await supabase.rpc('decrement_ingredient_stock', {
+                    ing_id: ingredient.ingredient_id,
+                    used_amount: totalAmount
+                });
+                
+                if (updateError) throw updateError;
+            }
+        }
+    } catch (error) {
+        console.error('Error deducting ingredients from inventory:', error);
+        throw error;
+    }
 }

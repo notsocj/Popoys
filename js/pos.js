@@ -6,152 +6,231 @@ let currentOrder = {
     total: 0
 };
 
-document.addEventListener('DOMContentLoaded', () => {
-    // Setup POS section content
+// Define ORDER_STATUS constant
+const ORDER_STATUS = {
+    COMPLETED: 'Completed',
+    VOIDED: 'Voided'
+};
+
+// Make initializePOS available globally
+window.initializePOS = function() {
     const posSection = document.getElementById('pos-section');
     if (posSection) {
         setupPOSInterface(posSection);
+    } else {
+        console.error('POS section element not found');
     }
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize POS if we're directly on the POS section
+    if (document.querySelector('.nav-link[data-section="pos"].bg-coffee')) {
+        window.initializePOS();
+    }
+
+    // Also listen for section changes directly
+    document.addEventListener('sectionChanged', (e) => {
+        if (e.detail.section === 'pos') {
+            window.initializePOS();
+        }
+    });
 });
 
 function setupPOSInterface(container) {
-    container.innerHTML = `
-        <div class="flex flex-col lg:flex-row h-full gap-6">
-            <!-- Products Panel -->
-            <div class="lg:w-2/3 bg-white rounded-lg shadow-md p-4">
-                <h2 class="text-xl font-bold text-coffee-dark mb-4">Menu Items</h2>
-                
-                <div class="flex gap-2 mb-4">
-                    <input type="text" id="product-search" placeholder="Search products..." 
-                        class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-coffee focus:border-coffee">
-                    <div class="relative">
-                        <button id="category-dropdown-btn" class="bg-coffee text-white px-4 py-2 rounded-md flex items-center">
-                            <span id="selected-category">All Categories</span>
-                            <i class="fas fa-chevron-down ml-2"></i>
-                        </button>
-                        <div id="category-dropdown" class="absolute right-0 mt-1 w-48 bg-white shadow-lg rounded-md py-1 z-10 hidden">
-                            <a href="#" class="category-item block px-4 py-2 text-coffee-dark hover:bg-coffee-light hover:text-white" data-category="">All Categories</a>
-                            <a href="#" class="category-item block px-4 py-2 text-coffee-dark hover:bg-coffee-light hover:text-white" data-category="Snacks">Snacks</a>
-                            <a href="#" class="category-item block px-4 py-2 text-coffee-dark hover:bg-coffee-light hover:text-white" data-category="Coffee-Based">Coffee-Based</a>
-                            <a href="#" class="category-item block px-4 py-2 text-coffee-dark hover:bg-coffee-light hover:text-white" data-category="Frappe">Frappe</a>
-                            <a href="#" class="category-item block px-4 py-2 text-coffee-dark hover:bg-coffee-light hover:text-white" data-category="Iced Coffee">Iced Coffee</a>
-                            <a href="#" class="category-item block px-4 py-2 text-coffee-dark hover:bg-coffee-light hover:text-white" data-category="Hot Coffee">Hot Coffee</a>
+    // Use a data attribute for tracking initialization instead of a child element
+    if (container.getAttribute('data-pos-initialized') === 'true') {
+        console.log('POS already initialized, skipping setup');
+        return;
+    }
+    
+    console.log('Setting up POS interface');
+    
+    // Mark as initialized before doing anything else
+    container.setAttribute('data-pos-initialized', 'true');
+    
+    try {
+        // Set up the POS interface HTML
+        container.innerHTML = `
+            <div class="flex flex-col lg:flex-row h-full gap-6">
+                <!-- Products Panel -->
+                <div class="lg:w-2/3 bg-white rounded-lg shadow-md p-4">
+                    <h2 class="text-xl font-bold text-coffee-dark mb-4">Menu Items</h2>
+                    
+                    <!-- Search and category filters -->
+                    <div class="flex gap-2 mb-4">
+                        <input type="text" id="product-search" placeholder="Search products..." 
+                            class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-coffee focus:border-coffee">
+                        <div class="relative">
+                            <button id="category-dropdown-btn" class="bg-coffee text-white px-4 py-2 rounded-md flex items-center">
+                                <span id="selected-category">All Categories</span>
+                                <i class="fas fa-chevron-down ml-2"></i>
+                            </button>
+                            <div id="category-dropdown" class="absolute right-0 mt-1 w-48 bg-white shadow-lg rounded-md py-1 z-10 hidden">
+                                <a href="#" class="category-item block px-4 py-2 text-coffee-dark hover:bg-coffee-light hover:text-white" data-category="">All Categories</a>
+                                <a href="#" class="category-item block px-4 py-2 text-coffee-dark hover:bg-coffee-light hover:text-white" data-category="Snacks">Snacks</a>
+                                <a href="#" class="category-item block px-4 py-2 text-coffee-dark hover:bg-coffee-light hover:text-white" data-category="Coffee-Based">Coffee-Based</a>
+                                <a href="#" class="category-item block px-4 py-2 text-coffee-dark hover:bg-coffee-light hover:text-white" data-category="Frappe">Frappe</a>
+                                <a href="#" class="category-item block px-4 py-2 text-coffee-dark hover:bg-coffee-light hover:text-white" data-category="Iced Coffee">Iced Coffee</a>
+                                <a href="#" class="category-item block px-4 py-2 text-coffee-dark hover:bg-coffee-light hover:text-white" data-category="Hot Coffee">Hot Coffee</a>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Products grid -->
+                    <div id="products-container" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[calc(100vh-320px)] overflow-y-auto">
+                        <!-- Products will be loaded here dynamically -->
+                        <div class="col-span-full text-center py-8 text-gray-500">
+                            <i class="fas fa-spinner fa-spin text-2xl mb-3"></i>
+                            <p>Loading products...</p>
                         </div>
                     </div>
                 </div>
                 
-                <div id="products-container" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[calc(100vh-320px)] overflow-y-auto">
-                    <!-- Products will be loaded here dynamically -->
-                    <div class="col-span-full text-center py-8 text-gray-500">
-                        <i class="fas fa-spinner fa-spin text-2xl mb-3"></i>
-                        <p>Loading products...</p>
+                <!-- Order Panel -->
+                <div class="lg:w-1/3 flex flex-col">
+                    <div class="bg-white rounded-lg shadow-md p-4 flex-1">
+                        <h2 class="text-xl font-bold text-coffee-dark mb-4">Current Order</h2>
+                        
+                        <div id="order-items" class="max-h-[calc(100vh-440px)] overflow-y-auto mb-4">
+                            <!-- Order items will appear here -->
+                            <div class="text-center text-gray-500 py-8">No items in order</div>
+                        </div>
+                        
+                        <div class="border-t pt-4">
+                            <div class="flex justify-between mb-2">
+                                <span class="font-semibold">Subtotal:</span>
+                                <span id="subtotal-amount">₱0.00</span>
+                            </div>
+                            <div class="flex justify-between text-xl font-bold text-coffee-dark">
+                                <span>Total:</span>
+                                <span id="total-amount">₱0.00</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white rounded-lg shadow-md p-4 mt-6">
+                        <div class="mb-4">
+                            <label for="payment-method" class="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                            <select id="payment-method" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-coffee focus:border-coffee">
+                                <option value="cash">Cash</option>
+                                <option value="card">Card</option>
+                                <option value="gcash">GCash</option>
+                            </select>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <button id="clear-btn" class="px-4 py-2 text-coffee-dark border border-coffee-dark rounded-md hover:bg-coffee-light hover:text-white transition-colors">
+                                Clear Order
+                            </button>
+                            <button id="checkout-btn" class="px-4 py-2 bg-coffee text-white rounded-md hover:bg-coffee-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                Checkout
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
             
-            <!-- Order Panel -->
-            <div class="lg:w-1/3 flex flex-col">
-                <div class="bg-white rounded-lg shadow-md p-4 flex-1">
-                    <h2 class="text-xl font-bold text-coffee-dark mb-4">Current Order</h2>
-                    
-                    <div id="order-items" class="max-h-[calc(100vh-440px)] overflow-y-auto mb-4">
-                        <!-- Order items will appear here -->
-                        <div class="text-center text-gray-500 py-8">No items in order</div>
-                    </div>
-                    
-                    <div class="border-t pt-4">
-                        <div class="flex justify-between mb-2">
-                            <span class="font-semibold">Subtotal:</span>
-                            <span id="subtotal-amount">₱0.00</span>
-                        </div>
-                        <div class="flex justify-between text-xl font-bold text-coffee-dark">
-                            <span>Total:</span>
-                            <span id="total-amount">₱0.00</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="bg-white rounded-lg shadow-md p-4 mt-6">
-                    <div class="mb-4">
-                        <label for="payment-method" class="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-                        <select id="payment-method" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-coffee focus:border-coffee">
-                            <option value="cash">Cash</option>
-                            <option value="card">Card</option>
-                            <option value="gcash">GCash</option>
-                        </select>
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-4">
-                        <button id="clear-btn" class="px-4 py-2 text-coffee-dark border border-coffee-dark rounded-md hover:bg-coffee-light hover:text-white transition-colors">
-                            Clear Order
-                        </button>
-                        <button id="checkout-btn" class="px-4 py-2 bg-coffee text-white rounded-md hover:bg-coffee-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                            Checkout
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Payment Modal -->
-        <div id="payment-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-                <h3 class="text-xl font-bold text-coffee-dark mb-4">Complete Payment</h3>
-                
-                <div class="mb-4">
-                    <div class="flex justify-between text-lg font-bold mb-2">
-                        <span>Total Amount:</span>
-                        <span id="modal-total">₱0.00</span>
-                    </div>
+            <!-- Payment Modal -->
+            <div id="payment-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+                <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                    <h3 class="text-xl font-bold text-coffee-dark mb-4">Complete Payment</h3>
                     
                     <div class="mb-4">
-                        <label for="amount-received" class="block text-sm font-medium text-gray-700 mb-1">Amount Received</label>
-                        <input type="number" id="amount-received" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-coffee focus:border-coffee">
+                        <div class="flex justify-between text-lg font-bold mb-2">
+                            <span>Total Amount:</span>
+                            <span id="modal-total">₱0.00</span>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label for="amount-received" class="block text-sm font-medium text-gray-700 mb-1">Amount Received</label>
+                            <input type="number" id="amount-received" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-coffee focus:border-coffee">
+                            <p id="payment-error" class="mt-1 text-red-600 text-sm hidden">Amount received is less than total amount</p>
+                        </div>
+                        
+                        <!-- Numeric Keypad -->
+                        <div class="grid grid-cols-3 gap-2 mb-4">
+                            <button type="button" class="numpad-btn bg-gray-200 py-2 rounded hover:bg-gray-300 transition-colors" data-value="7">7</button>
+                            <button type="button" class="numpad-btn bg-gray-200 py-2 rounded hover:bg-gray-300 transition-colors" data-value="8">8</button>
+                            <button type="button" class="numpad-btn bg-gray-200 py-2 rounded hover:bg-gray-300 transition-colors" data-value="9">9</button>
+                            <button type="button" class="numpad-btn bg-gray-200 py-2 rounded hover:bg-gray-300 transition-colors" data-value="4">4</button>
+                            <button type="button" class="numpad-btn bg-gray-200 py-2 rounded hover:bg-gray-300 transition-colors" data-value="5">5</button>
+                            <button type="button" class="numpad-btn bg-gray-200 py-2 rounded hover:bg-gray-300 transition-colors" data-value="6">6</button>
+                            <button type="button" class="numpad-btn bg-gray-200 py-2 rounded hover:bg-gray-300 transition-colors" data-value="1">1</button>
+                            <button type="button" class="numpad-btn bg-gray-200 py-2 rounded hover:bg-gray-300 transition-colors" data-value="2">2</button>
+                            <button type="button" class="numpad-btn bg-gray-200 py-2 rounded hover:bg-gray-300 transition-colors" data-value="3">3</button>
+                            <button type="button" class="numpad-btn bg-gray-200 py-2 rounded hover:bg-gray-300 transition-colors" data-value="0">0</button>
+                            <button type="button" class="numpad-btn bg-gray-200 py-2 rounded hover:bg-gray-300 transition-colors" data-value=".">.</button>
+                            <button type="button" class="numpad-btn bg-red-100 text-red-700 py-2 rounded hover:bg-red-200 transition-colors" data-value="clear">C</button>
+                            <button type="button" class="numpad-btn bg-yellow-100 text-yellow-700 py-2 rounded col-span-3 hover:bg-yellow-200 transition-colors" data-value="backspace">
+                                <i class="fas fa-backspace"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="flex justify-between text-lg">
+                            <span>Change:</span>
+                            <span id="change-amount">₱0.00</span>
+                        </div>
                     </div>
                     
-                    <div class="flex justify-between text-lg">
-                        <span>Change:</span>
-                        <span id="change-amount">₱0.00</span>
+                    <div class="flex justify-end gap-4">
+                        <button id="cancel-payment-btn" class="px-4 py-2 text-coffee-dark border border-coffee-dark rounded-md hover:bg-coffee-light hover:text-white transition-colors">
+                            Cancel
+                        </button>
+                        <button id="complete-payment-btn" class="px-4 py-2 bg-coffee text-white rounded-md hover:bg-coffee-dark transition-colors">
+                            Complete Payment
+                        </button>
                     </div>
                 </div>
-                
-                <div class="flex justify-end gap-4">
-                    <button id="cancel-payment-btn" class="px-4 py-2 text-coffee-dark border border-coffee-dark rounded-md hover:bg-coffee-light hover:text-white transition-colors">
-                        Cancel
-                    </button>
-                    <button id="complete-payment-btn" class="px-4 py-2 bg-coffee text-white rounded-md hover:bg-coffee-dark transition-colors">
-                        Complete Payment
-                    </button>
+            </div>
+            
+            <!-- Receipt Modal -->
+            <div id="receipt-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+                <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                    <h3 class="text-xl font-bold text-coffee-dark mb-4">Receipt</h3>
+                    
+                    <div id="receipt-content" class="bg-gray-100 p-4 font-mono text-sm mb-4">
+                        <!-- Receipt content will be generated here -->
+                    </div>
+                    
+                    <div class="flex justify-end gap-4">
+                        <button id="print-receipt-btn" class="px-4 py-2 text-coffee-dark border border-coffee-dark rounded-md hover:bg-coffee-light hover:text-white transition-colors">
+                            Print Receipt
+                        </button>
+                        <button id="close-receipt-btn" class="px-4 py-2 bg-coffee text-white rounded-md hover:bg-coffee-dark transition-colors">
+                            Close
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
+        `;
         
-        <!-- Receipt Modal -->
-        <div id="receipt-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-                <h3 class="text-xl font-bold text-coffee-dark mb-4">Receipt</h3>
-                
-                <div id="receipt-content" class="bg-gray-100 p-4 font-mono text-sm mb-4">
-                    <!-- Receipt content will be generated here -->
-                </div>
-                
-                <div class="flex justify-end gap-4">
-                    <button id="print-receipt-btn" class="px-4 py-2 text-coffee-dark border border-coffee-dark rounded-md hover:bg-coffee-light hover:text-white transition-colors">
-                        Print Receipt
-                    </button>
-                    <button id="close-receipt-btn" class="px-4 py-2 bg-coffee text-white rounded-md hover:bg-coffee-dark transition-colors">
-                        Close
-                    </button>
-                </div>
+        // Load products - using a setTimeout to ensure the DOM is ready
+        setTimeout(() => {
+            loadProducts();
+            setupPOSEventListeners();
+        }, 100);
+        
+    } catch (error) {
+        console.error('Error setting up POS interface:', error);
+        container.innerHTML = `
+            <div class="bg-red-100 text-red-700 p-4 rounded-md">
+                <h3 class="font-bold">Error Loading POS</h3>
+                <p>${error.message || 'Unknown error occurred'}</p>
+                <button id="retry-pos-btn" class="mt-4 px-4 py-2 bg-coffee text-white rounded-md">
+                    Retry Loading POS
+                </button>
             </div>
-        </div>
-    `;
-    
-    // Load products
-    loadProducts();
-    
-    // Add event listeners
-    setupPOSEventListeners();
+        `;
+        
+        // Add retry button listener
+        const retryBtn = container.querySelector('#retry-pos-btn');
+        if (retryBtn) {
+            retryBtn.addEventListener('click', () => {
+                container.removeAttribute('data-pos-initialized'); // Reset initialization flag
+                setupPOSInterface(container); // Try again
+            });
+        }
+    }
 }
 
 async function loadProducts(category = null) {
@@ -164,9 +243,11 @@ async function loadProducts(category = null) {
             </div>
         `;
         
-        // Use window.db.client or supabaseClient instead of supabase
-        // depending on how your app initializes the Supabase client
-        const supabaseClient = window.db ? window.db.client : supabase;
+        // Get the Supabase client (safely)
+        const supabaseClient = getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase client is not available');
+        }
         
         let query = supabaseClient.from('products').select('*');
         
@@ -254,6 +335,22 @@ async function loadProducts(category = null) {
     }
 }
 
+// Helper function to safely get the Supabase client
+function getSupabaseClient() {
+    // Try to get it from window.supabaseClient (safely)
+    if (window.supabaseClient) {
+        return window.supabaseClient;
+    }
+    
+    // Fallback to check other possible locations
+    if (window.db && window.db.client) {
+        return window.db.client;
+    }
+    
+    console.error('Supabase client not found. Make sure supabase-connection.js is loaded before pos.js');
+    return null;
+}
+
 function setupPOSEventListeners() {
     // Product search
     const searchInput = document.getElementById('product-search');
@@ -299,7 +396,15 @@ function setupPOSEventListeners() {
     document.getElementById('cancel-payment-btn').addEventListener('click', hidePaymentModal);
     document.getElementById('complete-payment-btn').addEventListener('click', completeOrder);
     
-    // Receipt modal
+    // Numeric keypad buttons
+    document.querySelectorAll('.numpad-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            const value = button.dataset.value;
+            handleNumpadInput(value);
+        });
+    });
+    
+    // Receipt modal buttons
     document.getElementById('print-receipt-btn').addEventListener('click', printReceipt);
     document.getElementById('close-receipt-btn').addEventListener('click', closeReceiptModal);
     
@@ -439,6 +544,7 @@ function showPaymentModal() {
 
 function hidePaymentModal() {
     document.getElementById('payment-modal').classList.add('hidden');
+    document.getElementById('payment-error').classList.add('hidden');
 }
 
 function calculateChange(e) {
@@ -446,31 +552,56 @@ function calculateChange(e) {
     const change = amountReceived - currentOrder.total;
     
     document.getElementById('change-amount').textContent = 
-        change >= 0 ? `₱${change.toFixed(2)}` : '-₱${Math.abs(change).toFixed(2)}';
+        change >= 0 ? `₱${change.toFixed(2)}` : `-₱${Math.abs(change).toFixed(2)}`;
+    
+    // Hide any previous error message when amount is modified
+    document.getElementById('payment-error').classList.add('hidden');
 }
 
 async function completeOrder() {
     try {
+        // Check if amount received is sufficient
+        const amountReceived = parseFloat(document.getElementById('amount-received').value) || 0;
+        if (amountReceived < currentOrder.total) {
+            document.getElementById('payment-error').classList.remove('hidden');
+            return;
+        }
+        
+        // Show loading indicator
+        const completePaymentBtn = document.getElementById('complete-payment-btn');
+        const originalBtnText = completePaymentBtn.innerHTML;
+        completePaymentBtn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i>Processing...`;
+        completePaymentBtn.disabled = true;
+        
         const userId = localStorage.getItem('userId');
         const paymentMethod = document.getElementById('payment-method').value;
         
+        // Get Supabase client safely
+        const supabaseClient = getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase client is not available');
+        }
+        
+        // Prepare the order data according to the schema
+        const orderData = {
+            user_id: userId,
+            total_amount: currentOrder.total,
+            payment_method: paymentMethod,
+            order_status: ORDER_STATUS.COMPLETED
+        };
+        
         // Insert order into database
-        const { data: orderData, error: orderError } = await supabase
+        const { data: orderResult, error: orderError } = await supabaseClient
             .from('orders')
-            .insert([{
-                user_id: userId,
-                total_amount: currentOrder.total,
-                payment_method: paymentMethod,
-                order_status: ORDER_STATUS.COMPLETED
-            }])
+            .insert([orderData])
             .select();
             
         if (orderError) throw orderError;
         
         // Get the new order ID
-        const orderId = orderData[0].order_id;
+        const orderId = orderResult[0].order_id;
         
-        // Insert order details
+        // Prepare order details according to the schema
         const orderDetails = currentOrder.items.map(item => ({
             order_id: orderId,
             product_id: item.id,
@@ -478,7 +609,8 @@ async function completeOrder() {
             price_each: item.price
         }));
         
-        const { error: detailsError } = await supabase
+        // Insert order details
+        const { error: detailsError } = await supabaseClient
             .from('order_details')
             .insert(orderDetails);
             
@@ -487,26 +619,42 @@ async function completeOrder() {
         // Update inventory
         await updateInventory(currentOrder.items);
         
+        // Restore button state
+        completePaymentBtn.innerHTML = originalBtnText;
+        completePaymentBtn.disabled = false;
+        
         // Hide payment modal
         hidePaymentModal();
         
         // Generate receipt
-        generateReceipt(orderData[0], currentOrder.items);
+        generateReceipt(orderResult[0], currentOrder.items);
         
         // Clear current order
         clearOrder();
         
     } catch (error) {
         console.error('Error completing order:', error);
+        
+        // Restore button state in case of error
+        const completePaymentBtn = document.getElementById('complete-payment-btn');
+        completePaymentBtn.innerHTML = 'Complete Payment';
+        completePaymentBtn.disabled = false;
+        
         alert('There was an error processing your order. Please try again.');
     }
 }
 
 async function updateInventory(orderItems) {
     try {
+        // Get Supabase client safely
+        const supabaseClient = getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase client is not available');
+        }
+        
         for (const item of orderItems) {
             // Get ingredients needed for this product
-            const { data: ingredients, error: ingredientsError } = await supabase
+            const { data: ingredients, error: ingredientsError } = await supabaseClient
                 .from('product_ingredients')
                 .select('ingredient_id, quantity_needed')
                 .eq('product_id', item.id);
@@ -517,7 +665,7 @@ async function updateInventory(orderItems) {
             for (const ingredient of ingredients) {
                 const totalUsed = ingredient.quantity_needed * item.quantity;
                 
-                const { error: updateError } = await supabase.rpc('decrement_ingredient_stock', {
+                const { error: updateError } = await supabaseClient.rpc('decrement_ingredient_stock', {
                     ing_id: ingredient.ingredient_id,
                     used_amount: totalUsed
                 });
@@ -561,8 +709,7 @@ function generateReceipt(order, items) {
         `;
     });
     
-    receiptHTML += `
-        </div>
+    receiptHTML += `</div>
         
         <div class="border-t pt-2">
             <div class="flex justify-between font-bold">
@@ -624,4 +771,23 @@ function printReceipt() {
 
 function closeReceiptModal() {
     document.getElementById('receipt-modal').classList.add('hidden');
+}
+
+// New function to handle numeric keypad input
+function handleNumpadInput(value) {
+    const amountInput = document.getElementById('amount-received');
+    
+    if (value === 'clear') {
+        amountInput.value = '';
+    } else if (value === 'backspace') {
+        amountInput.value = amountInput.value.slice(0, -1);
+    } else if (value === '.' && amountInput.value.includes('.')) {
+        // Prevent multiple decimal points
+        return;
+    } else {
+        amountInput.value += value;
+    }
+    
+    // Trigger change event to calculate change
+    amountInput.dispatchEvent(new Event('input'));
 }

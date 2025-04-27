@@ -26,7 +26,7 @@
             }
         }
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-coffee-cream min-h-screen flex flex-col">
@@ -69,6 +69,10 @@
                     <i class="fas fa-ban w-6"></i>
                     <span>Voided Sales</span>
                 </a>
+                <a href="#" data-section="daily-sales" class="nav-link flex items-center px-4 py-3 rounded-md text-coffee-dark hover:bg-coffee-light hover:text-white transition-colors">
+                    <i class="fas fa-chart-bar w-6"></i>
+                    <span>Daily Sales</span>
+                </a>
                 <a href="#" data-section="users" class="nav-link owner-only flex items-center px-4 py-3 rounded-md text-coffee-dark hover:bg-coffee-light hover:text-white transition-colors">
                     <i class="fas fa-users w-6"></i>
                     <span>User Management</span>
@@ -103,6 +107,11 @@
                 <!-- Voided Sales content will be loaded here -->
             </section>
             
+            <!-- Daily Sales Section -->
+            <section id="daily-sales-section" class="section hidden">
+                <!-- Daily Sales content will be loaded here -->
+            </section>
+            
             <!-- User Management Section -->
             <section id="users-section" class="section hidden">
                 <!-- User Management content will be loaded here -->
@@ -110,6 +119,7 @@
         </main>
     </div>
 
+    <!-- Scripts - Note the updated order -->
     <script src="js/supabase-connection.js"></script>
     <script src="js/navigation.js"></script>
     <script src="js/dashboard.js"></script>
@@ -119,5 +129,28 @@
     <script src="js/sales.js"></script>
     <script src="js/void.js"></script>
     <script src="js/users.js"></script>
+    <script src="js/daily-sales.js"></script>
+
+    <script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Add direct POS initialization button for debugging
+    const posLink = document.querySelector('.nav-link[data-section="pos"]');
+    if (posLink) {
+        posLink.addEventListener('click', function() {
+            setTimeout(() => {
+                const posSection = document.getElementById('pos-section');
+                if (posSection && !posSection.classList.contains('hidden')) {
+                    console.log('POS section is visible, initializing...');
+                    if (window.initializePOS) {
+                        window.initializePOS();
+                    } else {
+                        console.error('initializePOS function not found');
+                    }
+                }
+            }, 100);
+        });
+    }
+});
+</script>
 </body>
 </html>

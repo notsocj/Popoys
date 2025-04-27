@@ -1,125 +1,66 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize the navigation system
-    setupNavigation();
-    
-    // Setup logout functionality
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', logout);
-    }
-    
-    // Check authentication status and apply role-based permissions
-    checkAuthStatus();
-});
-
-function setupNavigation() {
+    // Get all nav links
     const navLinks = document.querySelectorAll('.nav-link');
     
+    // Add click event to each link
     navLinks.forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
             
-            // Remove active class from all links and sections
-            navLinks.forEach(l => l.classList.remove('active', 'bg-coffee', 'text-white'));
-            navLinks.forEach(l => l.classList.add('text-coffee-dark', 'hover:bg-coffee-light', 'hover:text-white'));
-            document.querySelectorAll('.section').forEach(s => s.classList.add('hidden'));
+            // Get the target section
+            const targetSection = link.dataset.section;
             
-            // Add active class to clicked link
+            // Hide all sections
+            document.querySelectorAll('.section').forEach(section => {
+                section.classList.add('hidden');
+            });
+            
+            // Show the target section
+            document.getElementById(`${targetSection}-section`).classList.remove('hidden');
+            
+            // Update active state on navigation
+            navLinks.forEach(navLink => {
+                navLink.classList.remove('bg-coffee', 'text-white');
+                navLink.classList.add('text-coffee-dark', 'hover:bg-coffee-light', 'hover:text-white');
+            });
+            
+            // Set active state
             link.classList.remove('text-coffee-dark', 'hover:bg-coffee-light', 'hover:text-white');
-            link.classList.add('active', 'bg-coffee', 'text-white');
+            link.classList.add('bg-coffee', 'text-white');
             
-            // Show corresponding section
-            const sectionId = link.getAttribute('data-section') + '-section';
-            const section = document.getElementById(sectionId);
-            
-            if (section) {
-                section.classList.remove('hidden');
-                loadSectionContent(link.getAttribute('data-section'));
-            }
+            // Custom event to notify section change
+            const event = new CustomEvent('sectionChanged', {
+                detail: { section: targetSection }
+            });
+            document.dispatchEvent(event);
         });
     });
     
-    // Set initial active section
-    activateDefaultSection();
-}
-
-function activateDefaultSection() {
-    // Get active link from URL hash or default to dashboard
-    const hash = window.location.hash.substring(1) || 'dashboard';
-    const activeLink = document.querySelector(`.nav-link[data-section="${hash}"]`);
-    
-    if (activeLink) {
-        // Simulate click on the active link
-        activeLink.click();
+    // Set default section active (dashboard or from URL hash)
+    const defaultSection = window.location.hash.substring(1) || 'dashboard';
+    const defaultLink = document.querySelector(`.nav-link[data-section="${defaultSection}"]`);
+    if (defaultLink) {
+        defaultLink.click();
     } else {
-        // Default to first nav link
-        const firstLink = document.querySelector('.nav-link');
-        if (firstLink) {
-            firstLink.click();
-        }
-    }
-}
-
-function loadSectionContent(sectionName) {
-    switch(sectionName) {
-        case 'dashboard':
-            loadDashboardData();
-            break;
-        case 'pos':
-            initializePOS();
-            break;
-        case 'inventory':
-            loadInventoryData();
-            break;
-        case 'sales':
-            loadSalesReport();
-            break;
-        case 'voids':
-            loadVoidedSales();
-            break;
-        case 'users':
-            loadUserManagement();
-            break;
+        // Fallback to first nav link
+        navLinks[0].click();
     }
     
-    // Update URL hash
-    window.location.hash = sectionName;
-}
-
-function checkAuthStatus() {
-    // Check if user is logged in
-    db.session.getCurrentUser().then(user => {
-        if (!user) {
-            window.location.href = 'index.html';
-            return;
-        }
-        
-        // Get and display user name
-        const userName = document.getElementById('userName');
-        if (userName) {
-            userName.textContent = user.email.split('@')[0];
-        }
-        
-        // Apply role-based permissions
-        applyRolePermissions();
-    });
-}
-
-function applyRolePermissions() {
+    // Check user role and hide restricted sections
     const userRole = localStorage.getItem('userRole');
-    const ownerOnlyElements = document.querySelectorAll('.owner-only');
-    
-    ownerOnlyElements.forEach(element => {
-        if (userRole !== ROLE.OWNER) {
-            element.classList.add('hidden');
-        } else {
-            element.classList.remove('hidden');
-        }
-    });
-}
+    if (userRole !== 'Owner') {
+        document.querySelectorAll('.owner-only').forEach(element => {
+            element.style.display = 'none';
+        });
+    }
+});
 
-function logout() {
-    db.auth.logout().then(() => {
-        window.location.href = 'index.html';
-    });
-}
+// Listen for the custom sectionChanged event
+document.addEventListener('sectionChanged', (e) => {
+    const section = e.detail.section;
+    
+    // Initialize specific sections when they become active
+    if (section === 'pos' && typeof initializePOS === 'function') {
+        initializePOS();
+    }
+});

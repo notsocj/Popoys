@@ -1,12 +1,126 @@
 # Popoy's Café POS System
 
 ## Overview
-Popoy's Café POS System is a web-based point of sale and inventory management system designed specifically for Popoy's Café Pastry and Roastery.
+Popoy's Café POS System is a web-based point of sale and inventory management system designed specifically for Popoy's Café Pastry and Roastery. The system provides complete functionality for managing sales, inventory, reporting, and user access control.
 
 ## Technology Stack
 - Frontend: HTML, Tailwind CSS
 - JavaScript: Vanilla JS
 - Backend/Database: Supabase
+- Charts: Chart.js
+
+## Features and Functionality
+
+### Authentication System
+- User registration with email verification
+- Secure login with session management
+- Role-based access control (Owner/Staff)
+- Password management and recovery
+
+### Point of Sale (POS)
+- Product selection by category
+- Real-time order management
+- Multiple payment methods (Cash, Card, GCash)
+- Quantity adjustment for items
+- Automated inventory deduction
+- Receipt generation and printing
+- Numeric keypad for payment entry
+
+### Inventory Management
+- Ingredient tracking and stock levels
+- Low stock alerts
+- Inventory adjustment (add/remove stock)
+- Stock level monitoring
+- Ingredient usage tracking
+
+### Sales Reporting
+- Daily sales summary
+- Best-selling products identification
+- Detailed order history
+- Sales filtering by date range
+- Sales reporting by product
+- Payment method analysis
+- Data export to CSV
+
+### Order Management
+- Order status tracking (Completed/Voided)
+- Order modification capability
+- Order voiding with reason tracking
+- Order detail viewing
+- Order history browsing
+
+### User Management
+- User creation and modification
+- Role assignment (Owner/Staff)
+- Password reset functionality
+- User activity tracking
+
+### Dashboard
+- Sales performance visualization
+- Top selling products charts
+- Daily revenue tracking
+- Low stock item alerts
+- System status overview
+
+## System Modules
+
+### POS Module
+- `setupPOSInterface()`: Creates the POS UI
+- `loadProducts()`: Fetches products from database
+- `addToOrder()`: Adds products to current order
+- `updateOrderDisplay()`: Refreshes the order UI
+- `completeOrder()`: Processes payment and saves order
+- `updateInventory()`: Adjusts stock levels
+- `generateReceipt()`: Creates printable receipt
+- `printReceipt()`: Sends receipt to printer
+
+### Inventory Module
+- `loadIngredients()`: Retrieves ingredient data
+- `showAdjustInventoryModal()`: Opens stock adjustment UI
+- `handleAdjustInventorySubmit()`: Processes inventory changes
+- `handleIngredientFormSubmit()`: Saves ingredient updates
+- `confirmDeleteIngredient()`: Removes ingredients
+
+### Sales Reports Module
+- `generateSalesReport()`: Creates sales analysis
+- `generateProductSalesReport()`: Analyzes product performance
+- `generateIngredientUsageReport()`: Tracks ingredient consumption
+- `createSalesChart()`: Visualizes sales data
+- `exportReport()`: Exports data to CSV format
+
+### Daily Sales Module
+- `loadDailySales()`: Retrieves daily sales data
+- `updateSalesSummary()`: Calculates sales metrics
+- `loadBestSellingItems()`: Identifies top sellers
+- `displayOrderDetails()`: Shows order information
+- `exportDailySales()`: Exports daily data to CSV
+
+### Void Management Module
+- `loadVoidedOrders()`: Gets voided order history
+- `showVoidOrderModal()`: Opens void interface
+- `confirmVoidOrder()`: Processes order voiding
+- `returnIngredientsToInventory()`: Restores stock levels
+
+### User Management Module
+- `loadUsers()`: Retrieves user data
+- `handleUserFormSubmit()`: Processes user changes
+- `showChangePasswordModal()`: Opens password UI
+- `handlePasswordFormSubmit()`: Updates passwords
+
+### Database Utilities
+- `getSupabaseClient()`: Safely retrieves database connection
+- `setupSupabaseFunctions()`: Initializes stored procedures
+- `createSampleProducts()`: Adds demo products
+
+## Database Schema
+The system uses a relational database with the following structure:
+- `users`: Store user accounts and access roles
+- `products`: Manage available products for sale
+- `ingredients`: Track raw materials in inventory
+- `product_ingredients`: Map which ingredients are used in each product
+- `orders`: Record customer purchases
+- `order_details`: Itemize products in each order
+- `voided_sales`: Track cancelled orders with reasons
 
 ## Recent Changes and Fixes
 
@@ -39,16 +153,6 @@ invalid input syntax for type integer: "002fcc45-8fa9-4796-a319-d7b22005e759"
 ### Files Consolidated
 - Merged functionality from `supabase-init.js` into `supabase-connection.js`
 - Made stored procedure creation optional and permission-based
-
-## Database Schema
-The system uses a relational database with the following structure:
-- users - Store user accounts and access roles
-- products - Manage available products for sale
-- ingredients - Track raw materials in inventory
-- product_ingredients - Map which ingredients are used in each product
-- orders - Record customer purchases
-- order_details - Itemize products in each order
-- voided_sales - Track cancelled orders with reasons
 
 ## Setup Instructions
 

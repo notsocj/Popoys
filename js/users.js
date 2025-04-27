@@ -122,16 +122,44 @@ function setupUsersInterface(container) {
     setupUserEventListeners();
 }
 
+// Helper function to safely get the Supabase client (same as in POS)
+function getSupabaseClient() {
+    if (window.supabaseClient) {
+        return window.supabaseClient;
+    }
+    
+    if (window.db && window.db.client) {
+        return window.db.client;
+    }
+    
+    if (window.supabase) {
+        return window.supabase;
+    }
+    
+    console.error('Supabase client not found');
+    return null;
+}
+
 async function loadUsers() {
     try {
-        const result = await db.users.getAll();
-        
-        if (!result.success) throw new Error(result.error);
-        
-        const data = result.data;
         const tableBody = document.getElementById('users-table-body');
+        tableBody.innerHTML = '<tr><td colspan="4" class="py-8 text-center text-gray-500">Loading users...</td></tr>';
         
-        if (data.length === 0) {
+        // Get Supabase client 
+        const supabaseClient = getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase client is not available');
+        }
+        
+        // Use direct Supabase query instead of db wrapper
+        const { data, error } = await supabaseClient
+            .from('users')
+            .select('*')
+            .order('created_at', { ascending: false });
+            
+        if (error) throw error;
+        
+        if (!data || data.length === 0) {
             tableBody.innerHTML = '<tr><td colspan="4" class="py-8 text-center text-gray-500">No users found</td></tr>';
             return;
         }
@@ -173,7 +201,7 @@ async function loadUsers() {
     } catch (error) {
         console.error('Error loading users:', error);
         document.getElementById('users-table-body').innerHTML = 
-            '<tr><td colspan="4" class="py-8 text-center text-red-500">Error loading users</td></tr>';
+            `<tr><td colspan="4" class="py-8 text-center text-red-500">Error loading users: ${error.message}</td></tr>`;
     }
 }
 
@@ -223,16 +251,29 @@ function showAddUserModal() {
 
 async function showEditUserModal(id) {
     try {
-        const result = await db.users.getById(id);
+        // Get Supabase client
+        const supabaseClient = getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase client is not available');
+        }
         
-        if (!result.success) throw new Error(result.error);
+        // Get user details
+        const { data, error } = await supabaseClient
+            .from('users')
+            .select('*')
+            .eq('user_id', id)
+            .single();
+            
+        if (error) throw error;
         
-        const data = result.data;
+        if (!data) {
+            throw new Error('User not found');
+        }
         
         document.getElementById('user-modal-title').textContent = 'Edit User';
         document.getElementById('user-id').value = data.user_id;
         document.getElementById('username-input').value = data.username;
-        document.getElementById('email-input').value = data.email;
+        document.getElementById('email-input').value = data.email || '';
         document.getElementById('password-field').classList.add('hidden');
         document.querySelector(`input[name="user-role"][value="${data.role}"]`).checked = true;
         
@@ -240,6 +281,7 @@ async function showEditUserModal(id) {
         
     } catch (error) {
         console.error('Error fetching user:', error);
+        alert('Error fetching user details: ' + error.message);
     }
 }
 
@@ -269,8 +311,8 @@ async function handleUserFormSubmit(e) {
     const password = document.getElementById('password-input').value;
     const role = document.querySelector('input[name="user-role"]:checked').value;
     
-    if (!username || !email) {
-        alert('Username and email are required');
+    if (!username) {
+        alert('Username is required');
         return;
     }
     
@@ -280,24 +322,50 @@ async function handleUserFormSubmit(e) {
     }
     
     try {
+        // Get Supabase client
+        const supabaseClient = getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase client is not available');
+        }
+        
         let result;
         
         if (id) {
             // Update existing user
-            result = await db.users.update(id, { username, email, role });
+            const { data, error } = await supabaseClient
+                .from('users')
+                .update({ 
+                    username, 
+                    email,
+                    role 
+                })
+                .eq('user_id', id);
+                
+            if (error) throw error;
+            result = { success: true };
         } else {
-            // Create new user
-            result = await db.auth.register(username, email, password, role);
+            // Create new user with password hash
+            // Note: In a real app, password hashing should be done server-side
+            // For demo purposes, we're inserting directly
+            const { data, error } = await supabaseClient
+                .from('users')
+                .insert([{
+                    username,
+                    email,
+                    password_hash: password, // In real app this should be hashed
+                    role
+                }]);
+                
+            if (error) throw error;
+            result = { success: true };
         }
-        
-        if (!result.success) throw new Error(result.error);
         
         hideUserModal();
         loadUsers();
         
     } catch (error) {
         console.error('Error saving user:', error);
-        alert(error.message || 'Error saving user');
+        alert('Error saving user: ' + error.message);
     }
 }
 
@@ -319,25 +387,48 @@ async function handlePasswordFormSubmit(e) {
     }
     
     try {
-        const result = await db.auth.changePassword(id, newPassword);
+        // Get Supabase client
+        const supabaseClient = getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase client is not available');
+        }
         
-        if (!result.success) throw new Error(result.error);
+        // Update password
+        // Note: In a real app, password hashing should be done server-side
+        const { data, error } = await supabaseClient
+            .from('users')
+            .update({ 
+                password_hash: newPassword // In real app this should be hashed
+            })
+            .eq('user_id', id);
+            
+        if (error) throw error;
         
         hidePasswordModal();
         alert('Password updated successfully');
         
     } catch (error) {
         console.error('Error updating password:', error);
-        alert(error.message || 'Error updating password');
+        alert('Error updating password: ' + error.message);
     }
 }
 
 async function confirmDeleteUser(id) {
     if (confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
         try {
-            const result = await db.users.delete(id);
+            // Get Supabase client
+            const supabaseClient = getSupabaseClient();
+            if (!supabaseClient) {
+                throw new Error('Supabase client is not available');
+            }
             
-            if (!result.success) throw new Error(result.error);
+            // Delete user
+            const { data, error } = await supabaseClient
+                .from('users')
+                .delete()
+                .eq('user_id', id);
+                
+            if (error) throw error;
             
             loadUsers();
             

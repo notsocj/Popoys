@@ -257,8 +257,14 @@ async function loadVoidedOrders(filterType) {
                 endDate = null;
         }
         
+        // Get Supabase client safely
+        const supabaseClient = getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase client is not available');
+        }
+        
         // Query voided orders
-        let query = supabase
+        let query = supabaseClient
             .from('voided_sales')
             .select(`
                 void_id,
@@ -317,8 +323,26 @@ async function loadVoidedOrders(filterType) {
     } catch (error) {
         console.error('Error loading voided orders:', error);
         document.getElementById('voided-orders-table').innerHTML = 
-            '<tr><td colspan="7" class="py-8 text-center text-red-500">Error loading voided orders</td></tr>';
+            `<tr><td colspan="7" class="py-8 text-center text-red-500">Error loading voided orders: ${error.message || 'Unknown error'}</td></tr>`;
     }
+}
+
+// Helper function to safely get the Supabase client (same approach used in other files)
+function getSupabaseClient() {
+    if (window.supabaseClient) {
+        return window.supabaseClient;
+    }
+    
+    if (window.db && window.db.client) {
+        return window.db.client;
+    }
+    
+    if (window.supabase) {
+        return window.supabase;
+    }
+    
+    console.error('Supabase client not found');
+    return null;
 }
 
 function updateVoidSummary(voidData) {
@@ -355,7 +379,12 @@ function updateVoidSummary(voidData) {
 
 async function searchVoidedOrder(orderId) {
     try {
-        const { data, error } = await supabase
+        const supabaseClient = getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase client is not available');
+        }
+        
+        const { data, error } = await supabaseClient
             .from('voided_sales')
             .select(`
                 void_id,
@@ -409,6 +438,8 @@ async function searchVoidedOrder(orderId) {
         
     } catch (error) {
         console.error('Error searching voided order:', error);
+        document.getElementById('voided-orders-table').innerHTML = 
+            `<tr><td colspan="7" class="py-8 text-center text-red-500">Error searching voided orders: ${error.message || 'Unknown error'}</td></tr>`;
     }
 }
 
@@ -434,8 +465,13 @@ async function lookupOrder() {
     }
     
     try {
+        const supabaseClient = getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase client is not available');
+        }
+        
         // Check if order exists and is not already voided
-        const { data: orderData, error: orderError } = await supabase
+        const { data: orderData, error: orderError } = await supabaseClient
             .from('orders')
             .select(`
                 order_id,
@@ -454,13 +490,19 @@ async function lookupOrder() {
             return;
         }
         
+        // Need to reference the correct ORDER_STATUS constant
+        const ORDER_STATUS = {
+            COMPLETED: 'Completed',
+            VOIDED: 'Voided'
+        };
+        
         if (orderData.order_status === ORDER_STATUS.VOIDED) {
             alert('This order has already been voided');
             return;
         }
         
         // Get order details
-        const { data: orderDetails, error: detailsError } = await supabase
+        const { data: orderDetails, error: detailsError } = await supabaseClient
             .from('order_details')
             .select(`
                 quantity,
@@ -495,7 +537,7 @@ async function lookupOrder() {
         
     } catch (error) {
         console.error('Error looking up order:', error);
-        alert('Error looking up order details');
+        alert('Error looking up order details: ' + (error.message || 'Unknown error'));
     }
 }
 
@@ -515,10 +557,20 @@ async function confirmVoidOrder() {
     
     try {
         const userId = localStorage.getItem('userId');
+        const supabaseClient = getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase client is not available');
+        }
+        
+        // Need to reference the correct ORDER_STATUS constant
+        const ORDER_STATUS = {
+            COMPLETED: 'Completed',
+            VOIDED: 'Voided'
+        };
         
         // Start a transaction
         // 1. Update order status
-        const { error: updateError } = await supabase
+        const { error: updateError } = await supabaseClient
             .from('orders')
             .update({ order_status: ORDER_STATUS.VOIDED })
             .eq('order_id', orderId);
@@ -526,7 +578,7 @@ async function confirmVoidOrder() {
         if (updateError) throw updateError;
         
         // 2. Record void
-        const { error: voidError } = await supabase
+        const { error: voidError } = await supabaseClient
             .from('voided_sales')
             .insert([{
                 order_id: orderId,
@@ -553,8 +605,13 @@ async function confirmVoidOrder() {
 
 async function returnIngredientsToInventory(orderId) {
     try {
+        const supabaseClient = getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase client is not available');
+        }
+        
         // Get the order details
-        const { data: orderDetails, error: detailsError } = await supabase
+        const { data: orderDetails, error: detailsError } = await supabaseClient
             .from('order_details')
             .select(`
                 product_id,
@@ -567,7 +624,7 @@ async function returnIngredientsToInventory(orderId) {
         // For each product in the order
         for (const detail of orderDetails) {
             // Get ingredients for this product
-            const { data: productIngredients, error: ingredientsError } = await supabase
+            const { data: productIngredients, error: ingredientsError } = await supabaseClient
                 .from('product_ingredients')
                 .select('ingredient_id, quantity_needed')
                 .eq('product_id', detail.product_id);
@@ -579,7 +636,7 @@ async function returnIngredientsToInventory(orderId) {
                 const totalAmount = parseFloat(ingredient.quantity_needed) * detail.quantity;
                 
                 // Update ingredient stock
-                const { error: updateError } = await supabase.rpc('increment_ingredient_stock', {
+                const { error: updateError } = await supabaseClient.rpc('increment_ingredient_stock', {
                     ing_id: ingredient.ingredient_id,
                     add_amount: totalAmount
                 });
@@ -595,7 +652,12 @@ async function returnIngredientsToInventory(orderId) {
 
 async function showVoidDetails(voidId) {
     try {
-        const { data, error } = await supabase
+        const supabaseClient = getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase client is not available');
+        }
+        
+        const { data, error } = await supabaseClient
             .from('voided_sales')
             .select(`
                 void_id,
@@ -618,7 +680,7 @@ async function showVoidDetails(voidId) {
         if (error) throw error;
         
         // Get order details
-        const { data: orderDetails, error: detailsError } = await supabase
+        const { data: orderDetails, error: detailsError } = await supabaseClient
             .from('order_details')
             .select(`
                 quantity,
@@ -686,7 +748,7 @@ async function showVoidDetails(voidId) {
         
     } catch (error) {
         console.error('Error loading void details:', error);
-        alert('Error loading void details');
+        alert('Error loading void details: ' + (error.message || 'Unknown error'));
     }
 }
 
