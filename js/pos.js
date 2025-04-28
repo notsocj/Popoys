@@ -410,8 +410,10 @@ function setupPOSEventListeners() {
     
     // Order items (event delegation for remove buttons)
     document.getElementById('order-items').addEventListener('click', (e) => {
-        if (e.target.classList.contains('remove-item-btn')) {
-            removeOrderItem(e.target.dataset.id);
+        const removeBtn = e.target.closest('.remove-item-btn');
+        if (removeBtn) {
+            const itemId = removeBtn.getAttribute('data-id');
+            removeOrderItem(itemId);
         }
     });
 }
@@ -468,6 +470,8 @@ function addToOrder(productCard) {
 }
 
 function removeOrderItem(id) {
+    if (!id) return;
+    
     currentOrder.items = currentOrder.items.filter(item => item.id !== id);
     updateOrderDisplay();
 }
