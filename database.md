@@ -32,7 +32,6 @@ CREATE TABLE ingredients (
   ingredient_name VARCHAR(255) NOT NULL,
   quantity_in_stock DECIMAL(10,2) DEFAULT 0,
   unit VARCHAR(50) NOT NULL,
-  reorder_level DECIMAL(10,2) DEFAULT 0,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
