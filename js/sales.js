@@ -1,9 +1,30 @@
+
+
 document.addEventListener('DOMContentLoaded', () => {
     const salesSection = document.getElementById('sales-section');
     if (salesSection) {
+        initializeSupabase();
         setupSalesInterface(salesSection);
     }
 });
+
+// Add supabase initialization function
+function initializeSupabase() {
+    // Check if supabase is already defined globally
+    if (typeof supabase === 'undefined') {
+        try {
+            // Get supabase from another file if possible
+            supabase = getSupabaseClient();
+            
+            if (!supabase) {
+                throw new Error('Supabase client not available');
+            }
+        } catch (error) {
+            console.error('Error initializing Supabase:', error);
+            alert('Error connecting to the database. Please refresh the page and try again.');
+        }
+    }
+}
 
 function setupSalesInterface(container) {
     container.innerHTML = `
@@ -19,6 +40,7 @@ function setupSalesInterface(container) {
                         <option value="monthly">Monthly</option>
                         <option value="yearly">Yearly</option>
                         <option value="product">Product Sales</option>
+                        <option value="category">Category Sales</option>
                         <option value="ingredient">Ingredient Usage</option>
                     </select>
                 </div>
@@ -256,27 +278,44 @@ async function generateReport() {
     const reportType = document.getElementById('report-type').value;
     let startDate, endDate;
     
-    if (reportType === 'weekly' || reportType === 'monthly' || reportType === 'yearly') {
-        const periodRange = document.getElementById('period-select').value.split(',');
-        startDate = periodRange[0];
-        endDate = periodRange[1];
-    } else {
-        startDate = document.getElementById('start-date').value;
-        endDate = document.getElementById('end-date').value;
-    }
-    
-    // Add one day to end date for inclusive results
-    const adjustedEndDate = new Date(endDate);
-    adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
-    const endDateForQuery = adjustedEndDate.toISOString().split('T')[0];
-    
-    // Clear previous chart
-    const chartCanvas = document.getElementById('sales-chart');
-    if (window.salesChart) {
-        window.salesChart.destroy();
-    }
-    
     try {
+        // Show loading state
+        document.getElementById('report-summary').innerHTML = '<p class="text-center py-4">Loading report data...</p>';
+        document.getElementById('report-table-body').innerHTML = '<tr><td colspan="8" class="py-8 text-center text-gray-500">Loading...</td></tr>';
+        
+        if (reportType === 'weekly' || reportType === 'monthly' || reportType === 'yearly') {
+            const periodSelect = document.getElementById('period-select');
+            if (!periodSelect.value) {
+                throw new Error('Please select a period');
+            }
+            const periodRange = periodSelect.value.split(',');
+            startDate = periodRange[0];
+            endDate = periodRange[1];
+        } else {
+            startDate = document.getElementById('start-date').value;
+            endDate = document.getElementById('end-date').value;
+            
+            if (!startDate || !endDate) {
+                throw new Error('Please select both start and end dates');
+            }
+            
+            // Validate date range
+            if (new Date(startDate) > new Date(endDate)) {
+                throw new Error('Start date cannot be after end date');
+            }
+        }
+        
+        // Add one day to end date for inclusive results
+        const adjustedEndDate = new Date(endDate);
+        adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
+        const endDateForQuery = adjustedEndDate.toISOString().split('T')[0];
+        
+        // Clear previous chart
+        const chartCanvas = document.getElementById('sales-chart');
+        if (window.salesChart) {
+            window.salesChart.destroy();
+        }
+        
         switch (reportType) {
             case 'daily':
             case 'weekly':
@@ -287,13 +326,30 @@ async function generateReport() {
             case 'product':
                 await generateProductSalesReport(startDate, endDateForQuery);
                 break;
+            case 'category':
+                await generateCategorySalesReport(startDate, endDateForQuery);
+                break;
             case 'ingredient':
                 await generateIngredientUsageReport(startDate, endDateForQuery);
                 break;
+            default:
+                throw new Error('Invalid report type');
         }
     } catch (error) {
         console.error('Error generating report:', error);
-        alert('There was an error generating the report. Please try again.');
+        document.getElementById('report-summary').innerHTML = `<p class="text-center text-red-600 py-4">Error: ${error.message || 'Unknown error'}</p>`;
+        document.getElementById('report-table-body').innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-600">Failed to generate report: ${error.message || 'Unknown error'}</td></tr>`;
+        
+        // Show alert only for user errors, not for technical errors
+        if (error.message && (
+            error.message.includes('select') || 
+            error.message.includes('date') ||
+            error.message.includes('Please')
+        )) {
+            alert(error.message);
+        } else {
+            alert('There was an error generating the report. Please try again.');
+        }
     }
 }
 
@@ -586,6 +642,140 @@ async function generateProductSalesReport(startDate, endDate) {
     }
 }
 
+
+async function generateCategorySalesReport(startDate, endDate) {
+    try {
+        // Fetch order details with product and category information within date range
+        const { data, error } = await supabase
+            .from('orders')
+            .select(`
+                order_id,
+                created_at,
+                order_details (
+                    quantity,
+                    price_each,
+                    products (
+                        product_id,
+                        product_name,
+                        category
+                    )
+                )
+            `)
+            .eq('order_status', ORDER_STATUS.COMPLETED)
+            .gte('created_at', startDate)
+            .lt('created_at', endDate);
+            
+        if (error) throw error;
+        
+        // Update titles
+        document.getElementById('details-title').textContent = 'Category Sales Details';
+        document.getElementById('chart-title').textContent = 'Sales by Category';
+        
+        // Aggregate sales by category
+        const categorySales = {};
+        let totalQuantitySold = 0;
+        let totalRevenue = 0;
+        
+        data.forEach(order => {
+            if (!order.order_details) return;
+            
+            order.order_details.forEach(detail => {
+                if (!detail.products) return;
+                
+                const category = detail.products.category || 'Uncategorized';
+                const quantity = detail.quantity;
+                const subtotal = parseFloat(detail.price_each) * quantity;
+                
+                if (!categorySales[category]) {
+                    categorySales[category] = {
+                        quantity: 0,
+                        revenue: 0,
+                        products: new Set()
+                    };
+                }
+                
+                categorySales[category].quantity += quantity;
+                categorySales[category].revenue += subtotal;
+                categorySales[category].products.add(detail.products.product_id);
+                totalQuantitySold += quantity;
+                totalRevenue += subtotal;
+            });
+        });
+        
+        // Convert to array and sort by revenue
+        const categoryArray = Object.entries(categorySales).map(([name, data]) => ({
+            name,
+            quantity: data.quantity,
+            revenue: data.revenue,
+            uniqueProducts: data.products.size
+        })).sort((a, b) => b.revenue - a.revenue);
+        
+        // Update summary
+        const reportSummary = document.getElementById('report-summary');
+        reportSummary.innerHTML = `
+            <div class="grid grid-cols-2 gap-4">
+                <div class="p-3 bg-coffee-cream rounded-lg">
+                    <p class="text-sm text-gray-600">Total Categories</p>
+                    <p class="text-xl font-bold text-coffee-dark">${categoryArray.length}</p>
+                </div>
+                <div class="p-3 bg-coffee-cream rounded-lg">
+                    <p class="text-sm text-gray-600">Total Revenue</p>
+                    <p class="text-xl font-bold text-coffee-dark">₱${totalRevenue.toFixed(2)}</p>
+                </div>
+                <div class="p-3 bg-coffee-cream rounded-lg">
+                    <p class="text-sm text-gray-600">Best Performing Category</p>
+                    <p class="text-xl font-bold text-coffee-dark">${categoryArray[0]?.name || 'N/A'}</p>
+                </div>
+                <div class="p-3 bg-coffee-cream rounded-lg">
+                    <p class="text-sm text-gray-600">Date Range</p>
+                    <p class="text-xl font-bold text-coffee-dark">${formatDateRange(startDate, endDate)}</p>
+                </div>
+            </div>
+        `;
+        
+        // Update table headers
+        document.getElementById('report-table-header').innerHTML = `
+            <th class="py-3 px-4 text-left">Category</th>
+            <th class="py-3 px-4 text-left">Products</th>
+            <th class="py-3 px-4 text-left">Items Sold</th>
+            <th class="py-3 px-4 text-left">Revenue</th>
+            <th class="py-3 px-4 text-left">% of Total</th>
+        `;
+        
+        // Update table body
+        const tableBody = document.getElementById('report-table-body');
+        
+        if (categoryArray.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-gray-500">No sales data found in this date range</td></tr>';
+            return;
+        }
+        
+        tableBody.innerHTML = categoryArray.map(category => {
+            const percentOfSales = (category.revenue / totalRevenue * 100).toFixed(2);
+            
+            return `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="py-3 px-4 font-medium">${category.name}</td>
+                    <td class="py-3 px-4">${category.uniqueProducts}</td>
+                    <td class="py-3 px-4">${category.quantity}</td>
+                    <td class="py-3 px-4">₱${category.revenue.toFixed(2)}</td>
+                    <td class="py-3 px-4">${percentOfSales}%</td>
+                </tr>
+            `;
+        }).join('');
+
+        // Create chart for category data
+        const chartLabels = categoryArray.map(c => c.name);
+        const chartData = categoryArray.map(c => c.revenue);
+        createCategorySalesChart(chartLabels, chartData);
+        
+    } catch (error) {
+        console.error('Error generating category sales report:', error);
+        throw error;
+    }
+}
+
+
 async function generateIngredientUsageReport(startDate, endDate) {
     try {
         // Fetch all orders in date range
@@ -800,6 +990,51 @@ function createProductSalesChart(labels, data) {
     });
 }
 
+
+function createCategorySalesChart(labels, data) {
+    const ctx = document.getElementById('sales-chart').getContext('2d');
+    
+    window.salesChart = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: [
+                    '#8B4513',
+                    '#A0522D', 
+                    '#D2691E',
+                    '#CD853F',
+                    '#DEB887',
+                    '#F5DEB3',
+                    '#D2B48C',
+                    '#BC8F8F'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: (context) => {
+                            const value = context.parsed;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((value / total) * 100).toFixed(2);
+                            return `₱${value.toFixed(2)} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
 function createIngredientUsageChart(labels, data) {
     const ctx = document.getElementById('sales-chart').getContext('2d');
     
@@ -852,6 +1087,9 @@ function exportReport() {
             break;
         case 'product':
             title = 'Product Sales Report';
+            break;
+        case 'category':
+            title = 'Category Sales Report';
             break;
         case 'ingredient':
             title = 'Ingredient Usage Report';
