@@ -89,7 +89,14 @@ function setupDashboardInterface() {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <!-- Sales Trend Chart -->
             <div class="bg-white rounded-lg shadow-md p-6">
-                <h3 class="text-lg font-semibold text-coffee-dark mb-4">Sales Trend (Last 7 Days)</h3>
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-coffee-dark">Sales Trend</h3>
+                    <select id="sales-trend-period" class="px-3 py-1 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-coffee focus:border-coffee">
+                        <option value="weekly" selected>Last 7 Days</option>
+                        <option value="monthly">Last 30 Days</option>
+                        <option value="yearly">Last 12 Months</option>
+                    </select>
+                </div>
                 <div class="h-64 relative">
                     <canvas id="salesTrendChart"></canvas>
                     <div id="salesTrendError" class="absolute inset-0 flex items-center justify-center hidden">
@@ -294,7 +301,33 @@ async function loadDashboardData() {
         
         // Load charts
         try {
-            await loadSalesTrendChart(supabaseClient);
+            const periodSelect = document.getElementById('sales-trend-period');
+            const period = periodSelect ? periodSelect.value : 'weekly';
+            await loadSalesTrendChart(supabaseClient, period);
+            
+            // Add event listener for period change
+            if (periodSelect) {
+                periodSelect.addEventListener('change', async () => {
+                    try {
+                        // Show loading state
+                        const loadingElement = document.getElementById('salesTrendLoading');
+                        if (loadingElement) {
+                            loadingElement.classList.remove('hidden');
+                        }
+                        
+                        // Hide any previous error
+                        const errorElement = document.getElementById('salesTrendError');
+                        if (errorElement) {
+                            errorElement.classList.add('hidden');
+                        }
+                        
+                        // Load chart with new period
+                        await loadSalesTrendChart(supabaseClient, periodSelect.value);
+                    } catch (error) {
+                        console.error('Error updating sales chart period:', error);
+                    }
+                });
+            }
         } catch (chartError) {
             console.error('Error loading sales trend chart:', chartError);
             document.getElementById('salesTrendLoading').classList.add('hidden');
@@ -341,7 +374,7 @@ function updateElementText(elementId, text) {
     }
 }
 
-async function loadSalesTrendChart(supabaseClient) {
+async function loadSalesTrendChart(supabaseClient, period = 'weekly') {
     try {
         // Show loading state
         const loadingElement = document.getElementById('salesTrendLoading');
@@ -349,38 +382,88 @@ async function loadSalesTrendChart(supabaseClient) {
             loadingElement.classList.remove('hidden');
         }
         
-        // Get last 7 days dates
-        const dates = [];
-        for (let i = 6; i >= 0; i--) {
-            const date = new Date();
-            date.setDate(date.getDate() - i);
-            dates.push(date.toISOString().split('T')[0]);
+        // Configure chart based on selected period
+        let dates = [];
+        let format = '';
+        let groupBy = '';
+        
+        switch (period) {
+            case 'weekly':
+                // Get last 7 days
+                for (let i = 6; i >= 0; i--) {
+                    const date = new Date();
+                    date.setDate(date.getDate() - i);
+                    dates.push(date);
+                }
+                format = { weekday: 'short', day: 'numeric' };
+                groupBy = 'day';
+                break;
+                
+            case 'monthly':
+                // Get last 30 days
+                for (let i = 29; i >= 0; i--) {
+                    const date = new Date();
+                    date.setDate(date.getDate() - i);
+                    dates.push(date);
+                }
+                format = { month: 'short', day: 'numeric' };
+                groupBy = 'day';
+                break;
+                
+            case 'yearly':
+                // Get last 12 months
+                for (let i = 11; i >= 0; i--) {
+                    const date = new Date();
+                    date.setDate(1); // First day of month
+                    date.setMonth(date.getMonth() - i);
+                    dates.push(date);
+                }
+                format = { month: 'short', year: '2-digit' };
+                groupBy = 'month';
+                break;
         }
         
-        // Get sales data for each date
-        const dailySales = [];
+        // Get sales data for each period
+        const salesData = [];
         
         for (const date of dates) {
-            const nextDay = new Date(date);
-            nextDay.setDate(nextDay.getDate() + 1);
+            let startDate, endDate;
+            
+            if (groupBy === 'day') {
+                // Daily data - get sales for this specific day
+                startDate = new Date(date);
+                startDate.setHours(0, 0, 0, 0);
+                
+                endDate = new Date(date);
+                endDate.setHours(23, 59, 59, 999);
+            } else {
+                // Monthly data - get sales for this month
+                startDate = new Date(date);
+                startDate.setDate(1);
+                startDate.setHours(0, 0, 0, 0);
+                
+                endDate = new Date(date);
+                endDate.setMonth(endDate.getMonth() + 1);
+                endDate.setDate(0); // Last day of month
+                endDate.setHours(23, 59, 59, 999);
+            }
             
             const { data, error } = await supabaseClient
                 .from('orders')
                 .select('total_amount')
                 .eq('order_status', 'Completed')
-                .gte('created_at', date)
-                .lt('created_at', nextDay.toISOString().split('T')[0]);
+                .gte('created_at', startDate.toISOString())
+                .lt('created_at', endDate.toISOString());
                 
             if (error) throw error;
             
-            const totalForDay = data.reduce((sum, order) => sum + parseFloat(order.total_amount || 0), 0);
-            dailySales.push(totalForDay);
+            const totalForPeriod = data.reduce((sum, order) => sum + parseFloat(order.total_amount || 0), 0);
+            salesData.push(totalForPeriod);
         }
         
         // Format dates for display
-        const formattedDates = dates.map(date => {
-            const d = new Date(date);
-            return d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
+        const formattedLabels = dates.map(date => {
+            return date.toLocaleDateString('en-US', format);
         });
         
         // Always hide loading state, regardless of outcome
@@ -405,18 +488,21 @@ async function loadSalesTrendChart(supabaseClient) {
             salesTrendChartInstance.destroy();
         }
         
-        // Create new chart
+        // Create new chart with appropriate type based on period
+        const chartType = groupBy === 'month' ? 'bar' : 'line';
+        
         salesTrendChartInstance = new Chart(chartCanvas.getContext('2d'), {
-            type: 'line',
+            type: chartType,
             data: {
-                labels: formattedDates,
+                labels: formattedLabels,
                 datasets: [{
-                    label: 'Daily Sales',
-                    data: dailySales,
+                    label: period === 'yearly' ? 'Monthly Sales' : 'Daily Sales',
+                    data: salesData,
                     borderColor: '#8B4513',
-                    backgroundColor: 'rgba(139, 69, 19, 0.1)',
+                    backgroundColor: period === 'yearly' ? 
+                        '#8B4513' : 'rgba(139, 69, 19, 0.1)',
                     tension: 0.4,
-                    fill: true
+                    fill: chartType === 'line'
                 }]
             },
             options: {
@@ -425,6 +511,13 @@ async function loadSalesTrendChart(supabaseClient) {
                 plugins: {
                     legend: {
                         display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return '₱' + context.raw.toFixed(2);
+                            }
+                        }
                     }
                 },
                 scales: {
