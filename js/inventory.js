@@ -300,7 +300,7 @@ async function loadIngredients() {
             if (quantityInStock <= 0) {
                 statusClass = 'bg-red-100 text-red-800';
                 statusText = 'Out of Stock';
-            } else if (quantityInStock <= 5) { // Using a default threshold of 5 instead of reorder_level
+            } else if (quantityInStock <= 5) {
                 statusClass = 'bg-yellow-100 text-yellow-800';
                 statusText = 'Low Stock';
             } else {
@@ -362,20 +362,28 @@ function filterIngredients() {
     const stockFilter = document.getElementById('stock-filter').value;
     const rows = document.querySelectorAll('#ingredients-table-body tr');
     
+    // Define stock thresholds - match the same values used in loadIngredients function
+    const LOW_STOCK_THRESHOLD = 5;
+    const OUT_OF_STOCK_THRESHOLD = 0;
+    
     rows.forEach(row => {
         // Skip message rows (those with colspan)
         if (row.querySelector('td[colspan]')) return;
         
         const ingredientName = row.cells[0].textContent.toLowerCase();
-        const status = row.querySelector('span').textContent;
+        const stockCell = row.cells[1].textContent; // Format is "123.45 kg" or similar
+        
+        // Extract just the numeric part from cell text
+        const stockValue = parseFloat(stockCell.split(' ')[0]);
         
         let showBySearch = ingredientName.includes(searchTerm);
         let showByStock = true;
         
+        // Filter based on actual quantity value - using same thresholds as status display
         if (stockFilter === 'low') {
-            showByStock = status === 'Low Stock';
+            showByStock = stockValue <= LOW_STOCK_THRESHOLD && stockValue > OUT_OF_STOCK_THRESHOLD;
         } else if (stockFilter === 'out') {
-            showByStock = status === 'Out of Stock';
+            showByStock = stockValue <= OUT_OF_STOCK_THRESHOLD;
         }
         
         if (showBySearch && showByStock) {
